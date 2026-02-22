@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'screens/home_page.dart';
+import 'services/notification_service.dart';
 
-void main() => runApp(const WalletNotesApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.instance.initialize();
+  await NotificationService.instance.requestPermission();
+  runApp(const WalletNotesApp());
+}
 
 class WalletNotesApp extends StatelessWidget {
   const WalletNotesApp({super.key});

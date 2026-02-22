@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import '../models/transaction.dart';
 import '../models/task.dart';
 import '../services/database_helper.dart';
+import '../services/export_service.dart';
 import '../weidgets/balance_card.dart';
 import '../weidgets/transaction_item.dart';
 import 'add_transaction_page.dart';
 import 'add_task_page.dart';
+import 'statistics_page.dart';
+import 'import_csv_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,6 +26,14 @@ class _HomePageState extends State<HomePage>
   double totalExpense = 0;
   late TabController _tabController;
 
+  // Search & Filter state
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _typeFilter = ''; // '' = semua, 'income', 'expense'
+  String _categoryFilter = '';
+  List<Transaction> _filteredTransactions = [];
+  List<String> _availableCategories = [];
+
   @override
   void initState() {
     super.initState();
@@ -33,6 +44,7 @@ class _HomePageState extends State<HomePage>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -43,10 +55,36 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _loadTransactions() async {
     final data = await DatabaseHelper.instance.getAllTransactions();
+    final cats = await DatabaseHelper.instance.getUsedExpenseCategories();
     setState(() {
       transactions = data;
+      _availableCategories = cats;
+      _applyFilter();
       _calculateBalance();
     });
+  }
+
+  void _applyFilter() {
+    List<Transaction> result = List.from(transactions);
+
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      result = result
+          .where(
+            (t) =>
+                t.title.toLowerCase().contains(q) ||
+                t.category.toLowerCase().contains(q) ||
+                (t.note?.toLowerCase().contains(q) ?? false),
+          )
+          .toList();
+    }
+    if (_typeFilter.isNotEmpty) {
+      result = result.where((t) => t.type == _typeFilter).toList();
+    }
+    if (_categoryFilter.isNotEmpty) {
+      result = result.where((t) => t.category == _categoryFilter).toList();
+    }
+    _filteredTransactions = result;
   }
 
   Future<void> _loadTasks() async {
@@ -61,8 +99,7 @@ class _HomePageState extends State<HomePage>
     double expense = 0;
 
     for (var t in transactions) {
-      if (t.type.toLowerCase() == 'income' ||
-          t.type.toLowerCase() == 'pemasukan') {
+      if (t.type == 'income') {
         income += t.amount;
       } else {
         expense += t.amount;
@@ -74,6 +111,16 @@ class _HomePageState extends State<HomePage>
       totalExpense = expense;
       totalBalance = income - expense;
     });
+  }
+
+  Future<void> _editTransaction(Transaction t) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AddTransactionPage(transaction: t),
+      ),
+    );
+    if (result == true) _loadTransactions();
   }
 
   Future<void> _deleteTransaction(int? id) async {
@@ -158,6 +205,59 @@ class _HomePageState extends State<HomePage>
         backgroundColor: Colors.green.shade700,
         centerTitle: true,
         elevation: 0,
+        actions: [
+          // Statistik
+          IconButton(
+            icon: const Icon(Icons.bar_chart, color: Colors.white),
+            tooltip: 'Statistik',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const StatisticsPage()),
+            ),
+          ),
+          // Menu lebih banyak
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) async {
+              if (value == 'export') {
+                if (transactions.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Tidak ada data untuk diekspor'),
+                    ),
+                  );
+                } else {
+                  await ExportService.exportTransactionsToCSV(transactions);
+                }
+              } else if (value == 'import') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ImportCsvPage()),
+                ).then((_) => _loadTransactions());
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'export',
+                child: ListTile(
+                  leading: Icon(Icons.upload_file),
+                  title: Text('Export CSV'),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'import',
+                child: ListTile(
+                  leading: Icon(Icons.download),
+                  title: Text('Import CSV Bank'),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                ),
+              ),
+            ],
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
@@ -193,40 +293,107 @@ class _HomePageState extends State<HomePage>
             income: totalIncome,
             expense: totalExpense,
           ),
+          // ── Search Bar ──────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (v) {
+                setState(() {
+                  _searchQuery = v;
+                  _applyFilter();
+                });
+              },
+              decoration: InputDecoration(
+                hintText: 'Cari transaksi...',
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                            _applyFilter();
+                          });
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 0,
+                  horizontal: 16,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+              ),
+            ),
+          ),
+          // ── Filter Chips ─────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _filterChip('Semua', '', null),
+                  _filterChip('Pemasukan', 'income', Colors.green),
+                  _filterChip('Pengeluaran', 'expense', Colors.red),
+                  if (_availableCategories.isNotEmpty)
+                    ..._availableCategories
+                        .take(5)
+                        .map((cat) => _categoryChip(cat)),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
                   'Transaksi Terakhir',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 Text(
-                  '${transactions.length} transaksi',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                  '${_filteredTransactions.length} / ${transactions.length} transaksi',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                 ),
               ],
             ),
           ),
-          if (transactions.isEmpty)
+          if (_filteredTransactions.isEmpty)
             Padding(
               padding: const EdgeInsets.all(40),
               child: Column(
                 children: [
                   Icon(
-                    Icons.receipt_long_outlined,
+                    _searchQuery.isNotEmpty || _typeFilter.isNotEmpty
+                        ? Icons.search_off
+                        : Icons.receipt_long_outlined,
                     size: 80,
                     color: Colors.grey.shade300,
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Belum ada transaksi',
+                    _searchQuery.isNotEmpty || _typeFilter.isNotEmpty
+                        ? 'Tidak ada transaksi yang cocok'
+                        : 'Belum ada transaksi',
                     style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Mulai tambahkan pemasukan atau pengeluaran!',
+                    _searchQuery.isNotEmpty || _typeFilter.isNotEmpty
+                        ? 'Coba ubah filter pencarian'
+                        : 'Mulai tambahkan pemasukan atau pengeluaran!',
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
                     textAlign: TextAlign.center,
                   ),
@@ -234,14 +401,78 @@ class _HomePageState extends State<HomePage>
               ),
             )
           else
-            ...transactions.map(
+            ..._filteredTransactions.map(
               (t) => TransactionItem(
                 transaction: t,
+                onTap: () => _editTransaction(t),
                 onDelete: () => _deleteTransaction(t.id),
               ),
             ),
           const SizedBox(height: 80),
         ],
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, String type, Color? color) {
+    final isSelected = _typeFilter == type && _categoryFilter.isEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (_) => setState(() {
+          _typeFilter = type;
+          _categoryFilter = '';
+          _applyFilter();
+        }),
+        selectedColor: (color ?? Colors.green).withOpacity(
+          0.2,
+        ), // ignore: deprecated_member_use
+        checkmarkColor: color ?? Colors.green,
+        labelStyle: TextStyle(
+          color: isSelected ? (color ?? Colors.green) : Colors.grey.shade700,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+        backgroundColor: Colors.white,
+        side: BorderSide(
+          color: isSelected ? (color ?? Colors.green) : Colors.grey.shade300,
+        ),
+        showCheckmark: false,
+        avatar: color != null
+            ? Icon(
+                type == 'income' ? Icons.arrow_downward : Icons.arrow_upward,
+                size: 14,
+                color: isSelected ? color : Colors.grey.shade500,
+              )
+            : null,
+      ),
+    );
+  }
+
+  Widget _categoryChip(String category) {
+    final isSelected = _categoryFilter == category;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(category),
+        selected: isSelected,
+        onSelected: (_) => setState(() {
+          _categoryFilter = isSelected ? '' : category;
+          _typeFilter = '';
+          _applyFilter();
+        }),
+        selectedColor: Colors.blue.shade100,
+        checkmarkColor: Colors.blue,
+        labelStyle: TextStyle(
+          color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+        backgroundColor: Colors.white,
+        side: BorderSide(
+          color: isSelected ? Colors.blue.shade400 : Colors.grey.shade300,
+        ),
+        showCheckmark: false,
       ),
     );
   }
@@ -414,7 +645,7 @@ class _HomePageState extends State<HomePage>
                             decoration: BoxDecoration(
                               color: _getPriorityColor(
                                 task.priority,
-                              // ignore: deprecated_member_use
+                                // ignore: deprecated_member_use
                               ).withOpacity(0.2),
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -431,12 +662,32 @@ class _HomePageState extends State<HomePage>
                       ),
                     ],
                   ),
-                  trailing: IconButton(
-                    icon: Icon(
-                      Icons.delete_outline,
-                      color: Colors.grey.shade400,
-                    ),
-                    onPressed: () => _deleteTask(task.id),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          color: Colors.blue.shade300,
+                        ),
+                        onPressed: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AddTaskPage(task: task),
+                            ),
+                          );
+                          if (result == true) _loadTasks();
+                        },
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.delete_outline,
+                          color: Colors.grey.shade400,
+                        ),
+                        onPressed: () => _deleteTask(task.id),
+                      ),
+                    ],
                   ),
                 ),
               ),

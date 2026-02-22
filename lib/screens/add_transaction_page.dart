@@ -4,7 +4,9 @@ import '../models/transaction.dart';
 import '../services/database_helper.dart';
 
 class AddTransactionPage extends StatefulWidget {
-  const AddTransactionPage({super.key});
+  final Transaction? transaction; // null = tambah baru, non-null = edit
+
+  const AddTransactionPage({super.key, this.transaction});
 
   @override
   State<AddTransactionPage> createState() => _AddTransactionPageState();
@@ -19,6 +21,8 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   String _selectedType = 'expense';
   String _selectedCategory = 'Makanan';
   DateTime _selectedDate = DateTime.now();
+
+  bool get _isEditing => widget.transaction != null;
 
   final List<String> _expenseCategories = [
     'Makanan',
@@ -38,6 +42,20 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
     'Hadiah',
     'Lainnya',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.transaction != null) {
+      final t = widget.transaction!;
+      _titleController.text = t.title;
+      _amountController.text = t.amount.toStringAsFixed(0);
+      _noteController.text = t.note ?? '';
+      _selectedType = t.type;
+      _selectedCategory = t.category;
+      _selectedDate = t.date;
+    }
+  }
 
   @override
   void dispose() {
@@ -77,18 +95,38 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   }
 
   Future<void> _saveTransaction() async {
-    if (_formKey.currentState!.validate()) {
-      final transaction = Transaction(
-        title: _titleController.text,
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_isEditing) {
+      final updated = Transaction(
+        id: widget.transaction!.id,
+        title: _titleController.text.trim(),
         amount: double.parse(_amountController.text),
         type: _selectedType,
         category: _selectedCategory,
         date: _selectedDate,
-        note: _noteController.text.isEmpty ? null : _noteController.text,
+        note: _noteController.text.isEmpty ? null : _noteController.text.trim(),
       );
-
+      await DatabaseHelper.instance.updateTransaction(updated);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Transaksi berhasil diperbarui!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
+    } else {
+      final transaction = Transaction(
+        title: _titleController.text.trim(),
+        amount: double.parse(_amountController.text),
+        type: _selectedType,
+        category: _selectedCategory,
+        date: _selectedDate,
+        note: _noteController.text.isEmpty ? null : _noteController.text.trim(),
+      );
       await DatabaseHelper.instance.insertTransaction(transaction);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -96,7 +134,7 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.pop(context);
+        Navigator.pop(context, true);
       }
     }
   }
@@ -106,9 +144,12 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text(
-          'Tambah Transaksi',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        title: Text(
+          _isEditing ? 'Edit Transaksi' : 'Tambah Transaksi',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
         backgroundColor: Colors.green.shade700,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -284,9 +325,12 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
                 ),
                 elevation: 2,
               ),
-              child: const Text(
-                'Simpan Transaksi',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              child: Text(
+                _isEditing ? 'Perbarui Transaksi' : 'Simpan Transaksi',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
