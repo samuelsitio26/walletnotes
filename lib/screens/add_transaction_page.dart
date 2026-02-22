@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../main.dart';
 import '../models/transaction.dart';
 import '../services/database_helper.dart';
 
@@ -79,7 +80,7 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: Colors.green.shade700,
+              primary: AppTheme.primary,
               onPrimary: Colors.white,
             ),
           ),
@@ -142,18 +143,20 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: Text(
           _isEditing ? 'Edit Transaksi' : 'Tambah Transaksi',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.white,
+            fontSize: 18,
           ),
         ),
-        backgroundColor: Colors.green.shade700,
+        backgroundColor: AppTheme.primaryDeep,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        flexibleSpace: Container(decoration: AppTheme.headerGradientDecoration),
       ),
       body: Form(
         key: _formKey,
@@ -317,19 +320,42 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
             ElevatedButton(
               onPressed: _saveTransaction,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade700,
+                backgroundColor: Colors.transparent,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                elevation: 2,
+                elevation: 0,
               ),
-              child: Text(
-                _isEditing ? 'Perbarui Transaksi' : 'Simpan Transaksi',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+              child: Ink(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppTheme.accent, AppTheme.primary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      // ignore: deprecated_member_use
+                      color: AppTheme.primary.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    _isEditing ? 'Perbarui Transaksi' : 'Simpan Transaksi',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -371,7 +397,7 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
               child: Icon(
                 icon,
                 color: isSelected ? Colors.white : Colors.grey.shade600,
-                size: 28,
+                size: 26,
               ),
             ),
             const SizedBox(height: 8),

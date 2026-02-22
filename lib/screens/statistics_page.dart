@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../main.dart';
 import '../services/database_helper.dart';
 
 class StatisticsPage extends StatefulWidget {
@@ -86,15 +87,20 @@ class _StatisticsPageState extends State<StatisticsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text(
           'Statistik',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            fontSize: 18,
+          ),
         ),
-        backgroundColor: Colors.green.shade700,
+        backgroundColor: AppTheme.primaryDeep,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        flexibleSpace: Container(decoration: AppTheme.headerGradientDecoration),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -169,10 +175,18 @@ class _StatisticsPageState extends State<StatisticsPage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: isSelected
-                      ? Colors.green.shade700
-                      : Colors.transparent,
+                  color: isSelected ? AppTheme.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
+                  boxShadow: isSelected
+                      ? [
+                          BoxShadow(
+                            // ignore: deprecated_member_use
+                            color: AppTheme.primary.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : null,
                 ),
                 child: Text(
                   p.$2,
@@ -180,7 +194,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
-                    color: isSelected ? Colors.white : Colors.grey.shade600,
+                    color: isSelected ? Colors.white : AppTheme.textSecondary,
                   ),
                 ),
               ),
@@ -200,8 +214,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
           child: _summaryCard(
             'Pemasukan',
             _totalIncome,
-            Colors.green,
-            Icons.arrow_downward,
+            AppTheme.income,
+            Icons.arrow_downward_rounded,
           ),
         ),
         const SizedBox(width: 8),
@@ -209,8 +223,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
           child: _summaryCard(
             'Pengeluaran',
             _totalExpense,
-            Colors.red,
-            Icons.arrow_upward,
+            AppTheme.expense,
+            Icons.arrow_upward_rounded,
           ),
         ),
         const SizedBox(width: 8),
@@ -218,8 +232,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
           child: _summaryCard(
             'Saldo',
             balance,
-            balance >= 0 ? Colors.blue : Colors.orange,
-            Icons.account_balance_wallet,
+            balance >= 0 ? AppTheme.primary : Colors.orange,
+            Icons.account_balance_wallet_rounded,
           ),
         ),
       ],
@@ -234,21 +248,26 @@ class _StatisticsPageState extends State<StatisticsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.shade200,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            // ignore: deprecated_member_use
+            color: color.withOpacity(0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
+        border: Border.all(
+          // ignore: deprecated_member_use
+          color: color.withOpacity(0.15),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               // ignore: deprecated_member_use
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(9),
             ),
             child: Icon(icon, color: color, size: 16),
           ),
@@ -256,7 +275,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
           Text(
             _currencyCompact.format(amount),
             style: TextStyle(
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w800,
               fontSize: 15,
               color: color,
             ),
@@ -264,7 +283,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
           const SizedBox(height: 2),
           Text(
             label,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
           ),
         ],
       ),
@@ -275,11 +294,23 @@ class _StatisticsPageState extends State<StatisticsPage> {
   Widget _buildSectionTitle(String title, IconData icon) {
     return Row(
       children: [
-        Icon(icon, color: Colors.green.shade700, size: 20),
-        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            // ignore: deprecated_member_use
+            color: AppTheme.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: AppTheme.primary, size: 18),
+        ),
+        const SizedBox(width: 10),
         Text(
           title,
-          style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+          ),
         ),
       ],
     );
@@ -401,13 +432,13 @@ class _StatisticsPageState extends State<StatisticsPage> {
         barRods: [
           BarChartRodData(
             toY: income,
-            color: Colors.green.shade400,
+            color: AppTheme.income,
             width: 10,
             borderRadius: BorderRadius.circular(4),
           ),
           BarChartRodData(
             toY: expense,
-            color: Colors.red.shade400,
+            color: AppTheme.expense,
             width: 10,
             borderRadius: BorderRadius.circular(4),
           ),
@@ -515,9 +546,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _legendDot(Colors.green.shade400, 'Pemasukan'),
+        _legendDot(AppTheme.income, 'Pemasukan'),
         const SizedBox(width: 20),
-        _legendDot(Colors.red.shade400, 'Pengeluaran'),
+        _legendDot(AppTheme.expense, 'Pengeluaran'),
       ],
     );
   }

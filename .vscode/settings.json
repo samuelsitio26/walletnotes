@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "D:/Project/flutter/walletnotes/linux"
+    "cmake.sourceDirectory": "D:/Project/flutter/walletnotes/linux",
+    "java.configuration.updateBuildConfiguration": "interactive"
 }

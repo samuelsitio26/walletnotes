@@ -350,9 +350,8 @@ class _ImportCsvPageState extends State<ImportCsvPage> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          // ignore: deprecated_member_use
                           color: (isIncome ? Colors.green : Colors.red)
-                              .withOpacity(0.1),
+                              .withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(

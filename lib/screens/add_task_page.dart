@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import '../main.dart';
 import '../models/task.dart';
 import '../services/database_helper.dart';
 import '../services/notification_service.dart';
@@ -56,7 +57,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: Colors.blue.shade700,
+              primary: AppTheme.primary,
               onPrimary: Colors.white,
             ),
           ),
@@ -75,7 +76,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
-              primary: Colors.blue.shade700,
+              primary: AppTheme.primary,
               onPrimary: Colors.white,
             ),
           ),
@@ -161,18 +162,20 @@ class _AddTaskPageState extends State<AddTaskPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: Text(
           _isEditing ? 'Edit Tugas' : 'Tambah Tugas',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.white,
+            fontSize: 18,
           ),
         ),
-        backgroundColor: Colors.blue.shade700,
+        backgroundColor: AppTheme.primaryDeep,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        flexibleSpace: Container(decoration: AppTheme.headerGradientDecoration),
       ),
       body: Form(
         key: _formKey,
@@ -318,9 +321,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 children: [
                   Icon(
                     Icons.notifications_active,
-                    color: _enableNotification
-                        ? Colors.blue.shade700
-                        : Colors.grey,
+                    color: _enableNotification ? AppTheme.accent : Colors.grey,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -346,7 +347,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                   Switch(
                     value: _enableNotification,
                     onChanged: (v) => setState(() => _enableNotification = v),
-                    activeThumbColor: Colors.blue.shade700,
+                    activeTrackColor: AppTheme.accent,
+                    activeThumbColor: Colors.white,
                   ),
                 ],
               ),
@@ -357,19 +359,42 @@ class _AddTaskPageState extends State<AddTaskPage> {
             ElevatedButton(
               onPressed: _saveTask,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade700,
+                backgroundColor: Colors.transparent,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                elevation: 2,
+                elevation: 0,
               ),
-              child: Text(
-                _isEditing ? 'Perbarui Tugas' : 'Simpan Tugas',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+              child: Ink(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [AppTheme.accent, AppTheme.primary],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      // ignore: deprecated_member_use
+                      color: AppTheme.primary.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    _isEditing ? 'Perbarui Tugas' : 'Simpan Tugas',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ),

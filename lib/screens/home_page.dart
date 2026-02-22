@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../main.dart';
+import 'arcade_game.dart';
 import '../models/transaction.dart';
 import '../models/task.dart';
 import '../services/database_helper.dart';
@@ -196,15 +198,21 @@ class _HomePageState extends State<HomePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text(
           'WalletNotes',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
         ),
-        backgroundColor: Colors.green.shade700,
+        backgroundColor: AppTheme.primaryDeep,
         centerTitle: true,
         elevation: 0,
+        flexibleSpace: Container(decoration: AppTheme.headerGradientDecoration),
         actions: [
           // Statistik
           IconButton(
@@ -213,6 +221,15 @@ class _HomePageState extends State<HomePage>
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const StatisticsPage()),
+            ),
+          ),
+          // Game launcher
+          IconButton(
+            icon: const Icon(Icons.videogame_asset, color: Colors.white),
+            tooltip: 'Arcade',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ArcadeGame()),
             ),
           ),
           // Menu lebih banyak
@@ -262,11 +279,19 @@ class _HomePageState extends State<HomePage>
           controller: _tabController,
           indicatorColor: Colors.white,
           indicatorWeight: 3,
+          indicatorSize: TabBarIndicatorSize.label,
           labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          unselectedLabelColor: Colors.white54,
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
           tabs: const [
-            Tab(icon: Icon(Icons.account_balance_wallet), text: 'Transaksi'),
-            Tab(icon: Icon(Icons.checklist), text: 'Tugas'),
+            Tab(
+              icon: Icon(Icons.account_balance_wallet_rounded),
+              text: 'Transaksi',
+            ),
+            Tab(icon: Icon(Icons.checklist_rounded), text: 'Tugas'),
           ],
         ),
       ),
@@ -274,11 +299,33 @@ class _HomePageState extends State<HomePage>
         controller: _tabController,
         children: [_buildTransactionsTab(), _buildTasksTab()],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddMenu(),
-        backgroundColor: Colors.green.shade700,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Tambah', style: TextStyle(color: Colors.white)),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppTheme.accent, AppTheme.primary],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              // ignore: deprecated_member_use
+              color: AppTheme.primary.withOpacity(0.4),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: () => _showAddMenu(),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          icon: const Icon(Icons.add_rounded, color: Colors.white),
+          label: const Text(
+            'Tambah',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          ),
+        ),
       ),
     );
   }
@@ -416,6 +463,7 @@ class _HomePageState extends State<HomePage>
 
   Widget _filterChip(String label, String type, Color? color) {
     final isSelected = _typeFilter == type && _categoryFilter.isEmpty;
+    final chipColor = color ?? AppTheme.primary;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
@@ -426,26 +474,31 @@ class _HomePageState extends State<HomePage>
           _categoryFilter = '';
           _applyFilter();
         }),
-        selectedColor: (color ?? Colors.green).withOpacity(
-          0.2,
-        ), // ignore: deprecated_member_use
-        checkmarkColor: color ?? Colors.green,
+        // ignore: deprecated_member_use
+        selectedColor: chipColor.withOpacity(0.15),
+        checkmarkColor: chipColor,
         labelStyle: TextStyle(
-          color: isSelected ? (color ?? Colors.green) : Colors.grey.shade700,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? chipColor : AppTheme.textSecondary,
+          fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+          fontSize: 13,
         ),
         backgroundColor: Colors.white,
         side: BorderSide(
-          color: isSelected ? (color ?? Colors.green) : Colors.grey.shade300,
+          color: isSelected ? chipColor : Colors.grey.shade300,
+          width: isSelected ? 1.5 : 1,
         ),
         showCheckmark: false,
         avatar: color != null
             ? Icon(
-                type == 'income' ? Icons.arrow_downward : Icons.arrow_upward,
+                type == 'income'
+                    ? Icons.arrow_downward_rounded
+                    : Icons.arrow_upward_rounded,
                 size: 14,
                 color: isSelected ? color : Colors.grey.shade500,
               )
             : null,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
       ),
     );
   }
@@ -462,17 +515,22 @@ class _HomePageState extends State<HomePage>
           _typeFilter = '';
           _applyFilter();
         }),
-        selectedColor: Colors.blue.shade100,
-        checkmarkColor: Colors.blue,
+        // ignore: deprecated_member_use
+        selectedColor: AppTheme.accent.withOpacity(0.15),
+        checkmarkColor: AppTheme.accent,
         labelStyle: TextStyle(
-          color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? AppTheme.accent : AppTheme.textSecondary,
+          fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+          fontSize: 13,
         ),
         backgroundColor: Colors.white,
         side: BorderSide(
-          color: isSelected ? Colors.blue.shade400 : Colors.grey.shade300,
+          color: isSelected ? AppTheme.accent : Colors.grey.shade300,
+          width: isSelected ? 1.5 : 1,
         ),
         showCheckmark: false,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
       ),
     );
   }
@@ -486,49 +544,85 @@ class _HomePageState extends State<HomePage>
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: Colors.green.shade200, width: 2),
+              borderRadius: BorderRadius.circular(18),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.check_circle,
-                      color: Colors.green.shade700,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${tasks.where((t) => t.isCompleted).length} / ${tasks.length}',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Tugas Selesai',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [AppTheme.primaryDeep, AppTheme.primary],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    // ignore: deprecated_member_use
+                    color: AppTheme.primary.withOpacity(0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
                   ),
                 ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        // ignore: deprecated_member_use
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.check_circle_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${tasks.where((t) => t.isCompleted).length} / ${tasks.length}',
+                            style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Tugas Selesai',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Progress ring indicator
+                    SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: CircularProgressIndicator(
+                        value: tasks.isEmpty
+                            ? 0
+                            : tasks.where((t) => t.isCompleted).length /
+                                  tasks.length,
+                        backgroundColor: Colors.white24,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                        strokeWidth: 5,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -578,7 +672,14 @@ class _HomePageState extends State<HomePage>
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Colors.grey.shade200, width: 1),
+                  side: BorderSide(
+                    color: task.isCompleted
+                        ? Colors.grey.shade200
+                        : _getPriorityColor(
+                            task.priority,
+                          ).withOpacity(0.3), // ignore: deprecated_member_use
+                    width: 1.5,
+                  ),
                 ),
                 child: ListTile(
                   contentPadding: const EdgeInsets.symmetric(
@@ -588,7 +689,8 @@ class _HomePageState extends State<HomePage>
                   leading: Checkbox(
                     value: task.isCompleted,
                     onChanged: (value) => _toggleTaskStatus(task),
-                    activeColor: Colors.green,
+                    activeColor: AppTheme.primary,
+                    side: BorderSide(color: Colors.grey.shade400, width: 1.5),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(6),
                     ),
@@ -666,10 +768,7 @@ class _HomePageState extends State<HomePage>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: Icon(
-                          Icons.edit_outlined,
-                          color: Colors.blue.shade300,
-                        ),
+                        icon: Icon(Icons.edit_outlined, color: AppTheme.accent),
                         onPressed: () async {
                           final result = await Navigator.push(
                             context,
@@ -712,84 +811,199 @@ class _HomePageState extends State<HomePage>
   }
 
   void _showAddMenu() {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+      barrierColor: Colors.black54,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 80),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                // ignore: deprecated_member_use
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
               ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Tambah Baru',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Header ──────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
                 decoration: BoxDecoration(
-                  color: Colors.green.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.account_balance_wallet,
-                  color: Colors.green.shade700,
-                ),
-              ),
-              title: const Text(
-                'Transaksi',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text('Tambah pemasukan atau pengeluaran'),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AddTransactionPage(),
+                  gradient: const LinearGradient(
+                    colors: AppTheme.headerGradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ).then((_) => _loadTransactions());
-              },
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(28),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      // ignore: deprecated_member_use
+                      decoration: BoxDecoration(
+                        // ignore: deprecated_member_use
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.add_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'Tambah Baru',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          // ignore: deprecated_member_use
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // ── Menu items ───────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _addMenuTile(
+                      icon: Icons.account_balance_wallet_rounded,
+                      iconBg: AppTheme.income,
+                      title: 'Transaksi',
+                      subtitle: 'Tambah pemasukan atau pengeluaran',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AddTransactionPage(),
+                          ),
+                        ).then((_) => _loadTransactions());
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _addMenuTile(
+                      icon: Icons.checklist_rounded,
+                      iconBg: AppTheme.accent,
+                      title: 'Tugas',
+                      subtitle: 'Tambah tugas atau reminder',
+                      onTap: () {
+                        Navigator.pop(context);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AddTaskPage(),
+                          ),
+                        ).then((_) => _loadTasks());
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _addMenuTile({
+    required IconData icon,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            // ignore: deprecated_member_use
+            color: iconBg.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              // ignore: deprecated_member_use
+              color: iconBg.withOpacity(0.2),
             ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  // ignore: deprecated_member_use
+                  color: iconBg.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(Icons.checklist, color: Colors.blue.shade700),
+                child: Icon(icon, color: iconBg, size: 24),
               ),
-              title: const Text(
-                'Tugas',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              subtitle: const Text('Tambah tugas atau reminder'),
-              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AddTaskPage()),
-                ).then((_) => _loadTasks());
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Colors.grey.shade400,
+              ),
+            ],
+          ),
         ),
       ),
     );
