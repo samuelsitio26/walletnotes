@@ -39,7 +39,7 @@ class _HomePageState extends State<HomePage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadData();
   }
 
@@ -223,15 +223,6 @@ class _HomePageState extends State<HomePage>
               MaterialPageRoute(builder: (_) => const StatisticsPage()),
             ),
           ),
-          // Game Wallet Runner
-          IconButton(
-            icon: const Icon(Icons.videogame_asset, color: Colors.white),
-            tooltip: 'Wallet Runner Game',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ArcadeGame()),
-            ),
-          ),
           // Menu lebih banyak
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: Colors.white),
@@ -292,40 +283,50 @@ class _HomePageState extends State<HomePage>
               text: 'Transaksi',
             ),
             Tab(icon: Icon(Icons.checklist_rounded), text: 'Tugas'),
+            Tab(icon: Icon(Icons.videogame_asset_rounded), text: 'Game'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
-        children: [_buildTransactionsTab(), _buildTasksTab()],
+        children: [_buildTransactionsTab(), _buildTasksTab(), _buildGameTab()],
       ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [AppTheme.accent, AppTheme.primary],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(32),
-          boxShadow: [
-            BoxShadow(
-              // ignore: deprecated_member_use
-              color: AppTheme.primary.withOpacity(0.4),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
+      floatingActionButton: ListenableBuilder(
+        listenable: _tabController,
+        builder: (context, _) {
+          if (_tabController.index == 2) return const SizedBox.shrink();
+          return Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [AppTheme.accent, AppTheme.primary],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: [
+                BoxShadow(
+                  // ignore: deprecated_member_use
+                  color: AppTheme.primary.withOpacity(0.4),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () => _showAddMenu(),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          icon: const Icon(Icons.add_rounded, color: Colors.white),
-          label: const Text(
-            'Tambah',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-          ),
-        ),
+            child: FloatingActionButton.extended(
+              onPressed: () => _showAddMenu(),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: const Text(
+                'Tambah',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -531,6 +532,134 @@ class _HomePageState extends State<HomePage>
         showCheckmark: false,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         padding: const EdgeInsets.symmetric(horizontal: 4),
+      ),
+    );
+  }
+
+  Widget _buildGameTab() {
+    return Container(
+      color: const Color(0xFFF0FDF4),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF0A1A0E),
+                      Color(0xFF1A5928),
+                      Color(0xFF22C55E),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: [
+                    BoxShadow(
+                      // ignore: deprecated_member_use
+                      color: Color(0xFF22C55E).withOpacity(0.4),
+                      blurRadius: 24,
+                      offset: Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.videogame_asset_rounded,
+                  color: Colors.white,
+                  size: 72,
+                ),
+              ),
+              const SizedBox(height: 28),
+              const Text(
+                'Wallet Runner',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F1F14),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Kumpulkan koin, aktifkan power-up,\ndan hindari semua rintangan!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 36),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ArcadeGame()),
+                  ),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 28),
+                  label: const Text(
+                    'MAIN SEKARANG',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF22C55E),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _gameFeatureChip(Icons.monetization_on_rounded, 'Koin'),
+                  const SizedBox(width: 10),
+                  _gameFeatureChip(Icons.shield_rounded, 'Shield'),
+                  const SizedBox(width: 10),
+                  _gameFeatureChip(Icons.double_arrow_rounded, '2x Skor'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _gameFeatureChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        // ignore: deprecated_member_use
+        color: const Color(0xFF22C55E).withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF22C55E)),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF22C55E),
+            ),
+          ),
+        ],
       ),
     );
   }
