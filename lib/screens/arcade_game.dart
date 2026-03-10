@@ -1,748 +1,688 @@
-import 'dart:async';
 import 'dart:math';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import '../services/database_helper.dart';
 
 // ─────────────────────────────────────────────
-// DATA MODELS
+//  Constants
 // ─────────────────────────────────────────────
-enum ObstacleType { barrier, car, wall }
+const int _kLanes = 3;
+const double _kLaneWidth = 90.0;
+const double _kPlayerSize = 46.0;
+const double _kObjectSize = 38.0;
+const double _kInitialSpeed = 220.0; // px per second
+const double _kSpeedIncrement = 12.0; // added every 5 s
+const double _kSpeedInterval = 5.0; // seconds
+const double _kSpeedMax = 560.0;
+const double _kPowerUpDuration = 6.0; // seconds
 
-class _GameObstacle {
-  int lane; // 0,1,2
-  double yNorm; // 0.0 (top) → 1.0 (bottom)
-  ObstacleType type;
-  _GameObstacle({required this.lane, required this.yNorm, required this.type});
-}
+// ─────────────────────────────────────────────
+//  Game object types
+// ─────────────────────────────────────────────
+enum ObjType { obstacle, coin, shield, magnet, doubleScore }
 
-class _Coin {
+class _GameObject {
   int lane;
-  double yNorm;
+  double y;
+  ObjType type;
   bool collected = false;
-  _Coin({required this.lane, required this.yNorm});
+
+  _GameObject({required this.lane, required this.y, required this.type});
 }
 
 // ─────────────────────────────────────────────
-// ENTRY WIDGET
+//  ArcadeGame widget
 // ─────────────────────────────────────────────
 class ArcadeGame extends StatefulWidget {
   const ArcadeGame({super.key});
+
   @override
   State<ArcadeGame> createState() => _ArcadeGameState();
 }
 
-class _ArcadeGameState extends State<ArcadeGame> with TickerProviderStateMixin {
-  // ─── lanes ──────────────────────────────────
-  static const int _laneCount = 3;
-  int _targetLane = 1; // 0=left 1=center 2=right
+class _ArcadeGameState extends State<ArcadeGame>
+    with SingleTickerProviderStateMixin {
+  // ── Player ──
+  int _playerLane = 1; // 0 left | 1 center | 2 right
+  double _playerTargetX = 0;
+  double _playerCurrentX = 0;
 
-  // ─── animation ──────────────────────────────
-  late AnimationController _runAnim; // legs anim
-  late AnimationController _laneAnim; // side move
-  late Animation<double> _laneTween;
-
-  double _playerPixelX = 0;
-
-  // ─── game state ─────────────────────────────
-  final List<_GameObstacle> _obstacles = [];
-  final List<_Coin> _coins = [];
-  Timer? _loop;
-  int _score = 0;
-  int _coinCount = 0;
+  // ── Game state ──
   bool _running = false;
   bool _gameOver = false;
-  double _speed = 0.006;
-  double _bgScroll = 0;
-  final Random _rand = Random();
+  bool _started = false;
+  int _lives = 3;
+  int _score = 0;
+  int _coins = 0;
+  double _speed = _kInitialSpeed;
 
-  // ─── swipe detection ────────────────────────
-  double _swipeStartX = 0;
-  static const double _swipeThreshold = 30;
+  // ── Power-ups ──
+  bool _shieldActive = false;
+  bool _magnetActive = false;
+  bool _doubleScoreActive = false;
+  double _shieldTimer = 0;
+  double _magnetTimer = 0;
+  double _doubleScoreTimer = 0;
 
-  // ─── sizes (set in build) ───────────────────
-  double _screenW = 0;
-  double _screenH = 0;
+  // ── Objects ──
+  final List<_GameObject> _objects = [];
+  final Random _rng = Random();
+  double _spawnTimer = 0;
+  double _spawnInterval = 1.4; // seconds between spawns
+  double _speedTimer = 0;
+  double _invincibleTimer = 0; // brief invincibility after hit
 
-  // ─── player visual ──────────────────────────
-  static const double _playerW = 36;
-  static const double _playerH = 64;
-  late double _playerBaseY;
+  // ── Layout ──
+  double _trackWidth = _kLanes * _kLaneWidth;
+  double _trackHeight = 600.0;
 
-  // ─── lane helpers ───────────────────────────
-  double _laneCenter(int lane) {
-    final laneW = _screenW / _laneCount;
-    return laneW * lane + laneW / 2 - _playerW / 2;
-  }
+  // ── Ticker ──
+  late Ticker _ticker;
+  Duration _lastTick = Duration.zero;
 
-  // ─────────────────────────────────────────────
+  // ── Drag input ──
+  double? _dragStartX;
+
   @override
   void initState() {
     super.initState();
-    _runAnim = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    )..repeat(reverse: true);
-
-    _laneAnim = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 160),
-    );
-    // Initialize _laneTween with a dummy tween so it's not late-uninitialized
-    _laneTween = Tween<double>(begin: 0, end: 0).animate(_laneAnim);
+    _ticker = createTicker(_onTick);
   }
 
   @override
   void dispose() {
-    _loop?.cancel();
-    _runAnim.dispose();
-    _laneAnim.dispose();
+    _ticker.dispose();
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
-  void _initGame() {
-    _obstacles.clear();
-    _coins.clear();
-    _score = 0;
-    _coinCount = 0;
-    _targetLane = 1;
-    _speed = 0.006;
-    _bgScroll = 0;
-    _gameOver = false;
-    _running = true;
-    _playerPixelX = _laneCenter(1);
-    _playerBaseY = _screenH - _playerH - 60;
+  // ─────────────────────────────────────────
+  //  Tick / update loop
+  // ─────────────────────────────────────────
+  void _onTick(Duration elapsed) {
+    if (!_running) return;
+    final dt = elapsed == Duration.zero
+        ? 0.0
+        : (elapsed - _lastTick).inMicroseconds / 1e6;
+    _lastTick = elapsed;
+    if (dt <= 0 || dt > 0.1) return; // skip first frame / huge gaps
 
-    _loop?.cancel();
-    _loop = Timer.periodic(const Duration(milliseconds: 16), (_) => _tick());
-    _runAnim.repeat(reverse: true);
-  }
-
-  void _tick() {
-    if (!_running || !mounted) return;
-
-    // background scroll
-    _bgScroll = (_bgScroll + _speed) % 1.0;
-
-    // speed increase
-    _speed += 0.000002;
-
-    // spawn obstacles (~2% per tick, 1 per lane max)
-    if (_rand.nextDouble() < 0.022) {
-      final lane = _rand.nextInt(_laneCount);
-      final conflict = _obstacles.any((o) => o.lane == lane && o.yNorm < 0.15);
-      if (!conflict) {
-        _obstacles.add(
-          _GameObstacle(
-            lane: lane,
-            yNorm: -0.12,
-            type:
-                ObstacleType.values[_rand.nextInt(ObstacleType.values.length)],
-          ),
-        );
-      }
-    }
-
-    // spawn coins
-    if (_rand.nextDouble() < 0.03) {
-      final lane = _rand.nextInt(_laneCount);
-      _coins.add(_Coin(lane: lane, yNorm: -0.08));
-    }
-
-    // move obstacles & coins
-    for (var o in _obstacles) {
-      o.yNorm += _speed;
-    }
-    for (var c in _coins) {
-      c.yNorm += _speed;
-    }
-
-    // remove cleared
-    _obstacles.removeWhere((o) => o.yNorm > 1.15);
-    _coins.removeWhere((c) => c.yNorm > 1.15);
-
-    _score += 1;
-
-    // collision detect
-    const double obsW = 60;
-    const double obsH = 44;
-    final double px = _playerPixelX;
-    final double py = _playerBaseY;
-
-    for (var o in _obstacles) {
-      final ox = _laneCenter(o.lane) + (_playerW - obsW) / 2;
-      final oy = o.yNorm * _screenH - obsH / 2;
-      final oRect = Rect.fromLTWH(ox, oy, obsW, obsH);
-      final pRect = Rect.fromLTWH(px + 4, py + 10, _playerW - 8, _playerH - 10);
-      if (pRect.overlaps(oRect)) {
-        _triggerGameOver();
-        return;
-      }
-    }
-
-    // coin collect
-    for (var c in _coins) {
-      if (c.collected) continue;
-      if (c.lane != _targetLane) continue;
-      final cy = c.yNorm * _screenH;
-      final coinRect = Rect.fromLTWH(
-        _laneCenter(c.lane) + _playerW / 2 - 10,
-        cy - 10,
-        20,
-        20,
-      );
-      final pRect = Rect.fromLTWH(px, py, _playerW, _playerH);
-      if (pRect.overlaps(coinRect)) {
-        c.collected = true;
-        _coinCount++;
-      }
-    }
-
-    setState(() {});
-  }
-
-  void _triggerGameOver() {
-    _loop?.cancel();
-    _running = false;
-    _runAnim.stop();
-    _gameOver = true;
-    setState(() {});
-
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          backgroundColor: const Color(0xFF1A2A1A),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: const Text(
-            '💀 Game Over',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Skor: ${(_score / 60).round()}',
-                style: const TextStyle(color: Colors.white70, fontSize: 18),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Icon(
-                    Icons.monetization_on,
-                    color: Colors.amber,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$_coinCount koin',
-                    style: const TextStyle(color: Colors.amber, fontSize: 16),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.pop(context);
-              },
-              child: const Text('Keluar', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-                setState(() {
-                  _initGame();
-                  _runAnim.repeat(reverse: true);
-                });
-              },
-              child: const Text(
-                'Main Lagi',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
+    setState(() {
+      _update(dt);
     });
   }
 
-  // ─── swipe ───────────────────────────────────
-  void _onSwipeStart(DragStartDetails d) {
-    _swipeStartX = d.localPosition.dx;
-  }
-
-  void _onSwipeEnd(DragEndDetails d) {
-    final dx = d.velocity.pixelsPerSecond.dx;
-    if (dx.abs() > 100) {
-      _movePlayer(dx > 0 ? 1 : -1);
-    }
-  }
-
-  void _onSwipeUpdate(DragUpdateDetails d) {
-    final dx = d.localPosition.dx - _swipeStartX;
-    if (dx.abs() > _swipeThreshold) {
-      _movePlayer(dx > 0 ? 1 : -1);
-      _swipeStartX = d.localPosition.dx;
-    }
-  }
-
-  void _movePlayer(int dir) {
-    final newLane = (_targetLane + dir).clamp(0, _laneCount - 1);
-    if (newLane == _targetLane) return;
-    _targetLane = newLane;
-
-    final to = _laneCenter(newLane);
-    final from = _playerPixelX;
-
-    _laneAnim.reset();
-    _laneTween =
-        Tween<double>(begin: from, end: to).animate(
-          CurvedAnimation(parent: _laneAnim, curve: Curves.easeOutCubic),
-        )..addListener(() {
-          setState(() => _playerPixelX = _laneTween.value);
-        });
-    _laneAnim.forward();
-  }
-
-  // ─────────────────────────────────────────────
-  @override
-  Widget build(BuildContext context) {
-    _screenW = MediaQuery.of(context).size.width;
-    _screenH =
-        MediaQuery.of(context).size.height -
-        kToolbarHeight -
-        MediaQuery.of(context).padding.top;
-
-    // init on first frame
-    if (!_running && !_gameOver) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => setState(_initGame));
+  void _update(double dt) {
+    // Speed ramp
+    _speedTimer += dt;
+    if (_speedTimer >= _kSpeedInterval && _speed < _kSpeedMax) {
+      _speedTimer = 0;
+      _speed = min(_speed + _kSpeedIncrement, _kSpeedMax);
+      _spawnInterval = max(0.55, _spawnInterval - 0.04);
     }
 
-    final laneW = _screenW / _laneCount;
+    // Score
+    _score += (_speed * dt * (_doubleScoreActive ? 2 : 1) / 60).round();
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0A1A0E),
-        title: Row(
-          children: [
-            const Icon(Icons.person_pin_circle, color: Colors.greenAccent),
-            const SizedBox(width: 8),
-            const Text(
-              'Wallet Runner',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-            const Spacer(),
-            const Icon(Icons.timer, color: Colors.white54, size: 18),
-            const SizedBox(width: 4),
-            Text(
-              '${(_score / 60).round()}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(width: 16),
-            const Icon(Icons.monetization_on, color: Colors.amber, size: 18),
-            const SizedBox(width: 4),
-            Text(
-              '$_coinCount',
-              style: const TextStyle(
-                color: Colors.amber,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: GestureDetector(
-        onHorizontalDragStart: _onSwipeStart,
-        onHorizontalDragUpdate: _onSwipeUpdate,
-        onHorizontalDragEnd: _onSwipeEnd,
-        child: Stack(
-          children: [
-            // ── Scrolling Road Background ──────────────
-            CustomPaint(
-              size: Size(_screenW, _screenH),
-              painter: _RoadPainter(scroll: _bgScroll, laneCount: _laneCount),
-            ),
+    // Power-up timers
+    if (_shieldActive) {
+      _shieldTimer -= dt;
+      if (_shieldTimer <= 0) _shieldActive = false;
+    }
+    if (_magnetActive) {
+      _magnetTimer -= dt;
+      if (_magnetTimer <= 0) _magnetActive = false;
+    }
+    if (_doubleScoreActive) {
+      _doubleScoreTimer -= dt;
+      if (_doubleScoreTimer <= 0) _doubleScoreActive = false;
+    }
 
-            // ── Coins ──────────────────────────────────
-            for (var c in _coins)
-              if (!c.collected)
-                Positioned(
-                  left: _laneCenter(c.lane) + _playerW / 2 - 10,
-                  top: c.yNorm * _screenH - 10,
-                  child: const _CoinWidget(),
-                ),
+    if (_invincibleTimer > 0) _invincibleTimer -= dt;
 
-            // ── Obstacles ──────────────────────────────
-            for (var o in _obstacles)
-              Positioned(
-                left: _laneCenter(o.lane) + (_playerW - 60) / 2,
-                top: o.yNorm * _screenH - 44 / 2,
-                width: 60,
-                height: 44,
-                child: _ObstacleWidget(type: o.type),
-              ),
+    // Smooth player lane movement
+    _playerCurrentX += (_playerTargetX - _playerCurrentX) * min(1.0, dt * 14);
 
-            // ── Player ─────────────────────────────────
-            if (_running || _gameOver)
-              Positioned(
-                left: _playerPixelX,
-                top: _playerBaseY,
-                width: _playerW,
-                height: _playerH,
-                child: AnimatedBuilder(
-                  animation: _runAnim,
-                  builder: (context2, child) => CustomPaint(
-                    painter: _PlayerPainter(
-                      runT: _runAnim.value,
-                      dead: _gameOver,
-                    ),
-                  ),
-                ),
-              ),
+    // Spawn objects
+    _spawnTimer += dt;
+    if (_spawnTimer >= _spawnInterval) {
+      _spawnTimer = 0;
+      _spawnObject();
+    }
 
-            // ── Lane tap areas (left / right) ──────────
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: laneW,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _movePlayer(-1),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(
-                      Icons.chevron_left,
-                      color: Colors.white.withValues(alpha: 0.2),
-                      size: 40,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              width: laneW,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _movePlayer(1),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Icon(
-                      Icons.chevron_right,
-                      color: Colors.white.withValues(alpha: 0.2),
-                      size: 40,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+    // Move objects & check collisions
+    final playerY = _trackHeight - 90.0;
+    final toRemove = <_GameObject>[];
 
-            // ── Hint text ───────────────────────────────
-            Positioned(
-              bottom: 12,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  'Geser kiri / kanan untuk pindah jalur',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+    for (final obj in _objects) {
+      obj.y += _speed * dt;
 
-// ─────────────────────────────────────────────
-// ROAD PAINTER (scrolling track)
-// ─────────────────────────────────────────────
-class _RoadPainter extends CustomPainter {
-  final double scroll;
-  final int laneCount;
-  _RoadPainter({required this.scroll, required this.laneCount});
+      if (obj.y > _trackHeight + _kObjectSize) {
+        toRemove.add(obj);
+        continue;
+      }
+      if (obj.collected) continue;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
+      // Collision detection
+      final objX = _laneToX(obj.lane);
+      final dx = (objX - _playerCurrentX).abs();
+      final dy = (obj.y - playerY).abs();
+      final hitRadius = (_kPlayerSize / 2 + _kObjectSize / 2) * 0.72;
 
-    // road surface
-    final roadPaint = Paint()..color = const Color(0xFF1C1C1C);
-    canvas.drawRect(Rect.fromLTWH(0, 0, w, h), roadPaint);
+      if (dx < hitRadius && dy < hitRadius) {
+        obj.collected = true;
+        _handleCollision(obj.type);
+      }
 
-    // scrolling dashed lane dividers
-    final linePaint = Paint()
-      ..color = const Color(0xFF3A3A3A)
-      ..strokeWidth = 2;
-
-    const dashH = 40.0;
-    const gapH = 30.0;
-    const period = dashH + gapH;
-
-    for (int i = 1; i < laneCount; i++) {
-      final x = w / laneCount * i;
-      double yStart = -(period * (1 - scroll % 1));
-      while (yStart < h) {
-        canvas.drawLine(
-          Offset(x, yStart),
-          Offset(x, yStart + dashH),
-          linePaint,
-        );
-        yStart += period;
+      // Magnet: attract nearby coins
+      if (_magnetActive && obj.type == ObjType.coin) {
+        final dist = sqrt(dx * dx + dy * dy);
+        if (dist < 140) {
+          obj.lane = _playerLane;
+          obj.y -= _speed * dt * 1.8;
+        }
       }
     }
 
-    // road edge glow lines
-    final edgePaint = Paint()
-      ..color = Colors.greenAccent.withValues(alpha: 0.15)
-      ..strokeWidth = 3;
-    canvas.drawLine(const Offset(4, 0), Offset(4, h), edgePaint);
-    canvas.drawLine(Offset(w - 4, 0), Offset(w - 4, h), edgePaint);
+    _objects.removeWhere((o) => toRemove.contains(o) || o.collected);
   }
 
-  @override
-  bool shouldRepaint(_RoadPainter old) => old.scroll != scroll;
-}
-
-// ─────────────────────────────────────────────
-// PLAYER PAINTER (animated running character)
-// ─────────────────────────────────────────────
-class _PlayerPainter extends CustomPainter {
-  final double runT; // 0.0 → 1.0
-  final bool dead;
-  _PlayerPainter({required this.runT, required this.dead});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final cx = w / 2;
-
-    final bodyColor = dead ? Colors.red.shade400 : Colors.greenAccent;
-    final skinColor = dead ? Colors.grey.shade400 : const Color(0xFFFFD39B);
-
-    final bodyPaint = Paint()..color = bodyColor;
-    final skinPaint = Paint()..color = skinColor;
-    final darkPaint = Paint()..color = Colors.black87;
-    final shadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.3)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-
-    // shadow
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx, h - 4), width: 28, height: 8),
-      shadowPaint,
-    );
-
-    // legs (animated)
-    final legAngle = (runT - 0.5) * 0.8;
-    final legPaint = Paint()
-      ..color = const Color(0xFF1565C0)
-      ..strokeWidth = 7
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final hipY = h * 0.56;
-    final lLegEnd = Offset(
-      cx - 8 + sin(legAngle) * 14,
-      hipY + 22 + cos(legAngle.abs()) * 4,
-    );
-    final rLegEnd = Offset(
-      cx + 8 - sin(legAngle) * 14,
-      hipY + 22 + cos(legAngle.abs()) * 4,
-    );
-    canvas.drawLine(Offset(cx - 5, hipY), lLegEnd, legPaint);
-    canvas.drawLine(Offset(cx + 5, hipY), rLegEnd, legPaint);
-
-    // shoes
-    final shoePaint = Paint()
-      ..color = Colors.orange.shade700
-      ..strokeWidth = 5
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(lLegEnd, lLegEnd + const Offset(8, 0), shoePaint);
-    canvas.drawLine(rLegEnd, rLegEnd + const Offset(8, 0), shoePaint);
-
-    // torso
-    final torsoRect = Rect.fromCenter(
-      center: Offset(cx, h * 0.43),
-      width: 20,
-      height: 22,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(torsoRect, const Radius.circular(6)),
-      bodyPaint,
-    );
-
-    // backpack
-    final bpPaint = Paint()..color = bodyColor.withValues(alpha: 0.6);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(cx - 10, h * 0.42),
-          width: 8,
-          height: 14,
-        ),
-        const Radius.circular(3),
-      ),
-      bpPaint,
-    );
-
-    // arms (swing opposite to legs)
-    final armPaint = Paint()
-      ..color = bodyColor
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final shoulderY = h * 0.36;
-    final lArmEnd = Offset(
-      cx - 12 - sin(legAngle) * 10,
-      shoulderY + 12 + cos(legAngle.abs()) * 3,
-    );
-    final rArmEnd = Offset(
-      cx + 12 + sin(legAngle) * 10,
-      shoulderY + 12 + cos(legAngle.abs()) * 3,
-    );
-    canvas.drawLine(Offset(cx - 8, shoulderY), lArmEnd, armPaint);
-    canvas.drawLine(Offset(cx + 8, shoulderY), rArmEnd, armPaint);
-
-    // neck
-    canvas.drawLine(
-      Offset(cx, h * 0.35),
-      Offset(cx, h * 0.28),
-      Paint()
-        ..color = skinColor
-        ..strokeWidth = 5
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke,
-    );
-
-    // head
-    canvas.drawCircle(Offset(cx, h * 0.23), 12, skinPaint);
-
-    // hair
-    canvas.drawArc(
-      Rect.fromCenter(center: Offset(cx, h * 0.23), width: 24, height: 24),
-      pi,
-      pi,
-      false,
-      Paint()
-        ..color = Colors.brown.shade800
-        ..style = PaintingStyle.fill,
-    );
-
-    // eyes
-    if (!dead) {
-      canvas.drawCircle(Offset(cx - 4, h * 0.22), 2, darkPaint);
-      canvas.drawCircle(Offset(cx + 4, h * 0.22), 2, darkPaint);
+  void _spawnObject() {
+    final lane = _rng.nextInt(_kLanes);
+    // Weighted random: 40% obstacle, 35% coin, 8% shield, 8% magnet, 9% doubleScore
+    final r = _rng.nextDouble();
+    ObjType type;
+    if (r < 0.40) {
+      type = ObjType.obstacle;
+    } else if (r < 0.75) {
+      type = ObjType.coin;
+    } else if (r < 0.83) {
+      type = ObjType.shield;
+    } else if (r < 0.91) {
+      type = ObjType.magnet;
     } else {
-      // X eyes when dead
-      final ep = Paint()
-        ..color = Colors.black
-        ..strokeWidth = 2
-        ..style = PaintingStyle.stroke;
-      canvas.drawLine(Offset(cx - 6, h * 0.21), Offset(cx - 2, h * 0.23), ep);
-      canvas.drawLine(Offset(cx - 6, h * 0.23), Offset(cx - 2, h * 0.21), ep);
-      canvas.drawLine(Offset(cx + 2, h * 0.21), Offset(cx + 6, h * 0.23), ep);
-      canvas.drawLine(Offset(cx + 2, h * 0.23), Offset(cx + 6, h * 0.21), ep);
+      type = ObjType.doubleScore;
+    }
+
+    // Avoid spawning obstacle on same lane as another obstacle close by
+    if (type == ObjType.obstacle) {
+      final blocked = _objects
+          .where(
+            (o) => o.type == ObjType.obstacle && o.lane == lane && o.y < 120,
+          )
+          .isNotEmpty;
+      if (blocked) return;
+    }
+
+    _objects.add(_GameObject(lane: lane, y: -_kObjectSize, type: type));
+  }
+
+  void _handleCollision(ObjType type) {
+    switch (type) {
+      case ObjType.coin:
+        _coins++;
+        break;
+      case ObjType.obstacle:
+        if (_shieldActive) {
+          _shieldActive = false;
+          _shieldTimer = 0;
+        } else if (_invincibleTimer <= 0) {
+          _lives--;
+          _invincibleTimer = 1.5;
+          if (_lives <= 0) {
+            _endGame();
+          }
+        }
+        break;
+      case ObjType.shield:
+        _shieldActive = true;
+        _shieldTimer = _kPowerUpDuration;
+        break;
+      case ObjType.magnet:
+        _magnetActive = true;
+        _magnetTimer = _kPowerUpDuration;
+        break;
+      case ObjType.doubleScore:
+        _doubleScoreActive = true;
+        _doubleScoreTimer = _kPowerUpDuration;
+        break;
     }
   }
 
-  @override
-  bool shouldRepaint(_PlayerPainter old) =>
-      old.runT != runT || old.dead != dead;
-}
+  // ─────────────────────────────────────────
+  //  Game flow
+  // ─────────────────────────────────────────
+  void _startGame() {
+    setState(() {
+      _running = true;
+      _started = true;
+      _gameOver = false;
+      _lives = 3;
+      _score = 0;
+      _coins = 0;
+      _speed = _kInitialSpeed;
+      _spawnInterval = 1.4;
+      _speedTimer = 0;
+      _spawnTimer = 0;
+      _invincibleTimer = 0;
+      _shieldActive = false;
+      _magnetActive = false;
+      _doubleScoreActive = false;
+      _playerLane = 1;
+      _playerTargetX = _laneToX(1);
+      _playerCurrentX = _playerTargetX;
+      _objects.clear();
+      _lastTick = Duration.zero;
+    });
+    _ticker.start();
+  }
 
-// ─────────────────────────────────────────────
-// OBSTACLE WIDGET
-// ─────────────────────────────────────────────
-class _ObstacleWidget extends StatelessWidget {
-  final ObstacleType type;
-  const _ObstacleWidget({required this.type});
+  void _endGame() {
+    _running = false;
+    _ticker.stop();
+    _gameOver = true;
+    DatabaseHelper.instance.addGameCoins(_coins, _score);
+  }
 
+  void _moveLeft() {
+    if (_playerLane > 0) {
+      setState(() {
+        _playerLane--;
+        _playerTargetX = _laneToX(_playerLane);
+      });
+    }
+  }
+
+  void _moveRight() {
+    if (_playerLane < _kLanes - 1) {
+      setState(() {
+        _playerLane++;
+        _playerTargetX = _laneToX(_playerLane);
+      });
+    }
+  }
+
+  double _laneToX(int lane) {
+    return lane * _kLaneWidth + _kLaneWidth / 2 - _kPlayerSize / 2;
+  }
+
+  // ─────────────────────────────────────────
+  //  Build
+  // ─────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final Color color;
-    final IconData icon;
-    final String label;
-    switch (type) {
-      case ObstacleType.barrier:
-        color = Colors.red.shade700;
-        icon = Icons.warning_rounded;
-        label = 'STOP';
-      case ObstacleType.car:
-        color = Colors.blue.shade700;
-        icon = Icons.directions_car;
-        label = 'CAR';
-      case ObstacleType.wall:
-        color = Colors.orange.shade700;
-        icon = Icons.safety_divider;
-        label = 'WALL';
-    }
+    _trackWidth = _kLanes * _kLaneWidth;
+    _trackHeight = MediaQuery.of(context).size.height - 200;
 
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D1A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text(
+          'Wallet Runner',
+          style: TextStyle(
+            color: Colors.amberAccent,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.5,
+          ),
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          _buildHUD(),
+          Expanded(
+            child: Center(
+              child: GestureDetector(
+                onHorizontalDragStart: (d) => _dragStartX = d.localPosition.dx,
+                onHorizontalDragUpdate: (d) {
+                  if (_dragStartX == null) return;
+                  final delta = d.localPosition.dx - _dragStartX!;
+                  if (delta.abs() > 30) {
+                    if (delta > 0) {
+                      _moveRight();
+                    } else {
+                      _moveLeft();
+                    }
+                    _dragStartX = d.localPosition.dx;
+                  }
+                },
+                onTapUp: (d) {
+                  if (!_running && !_gameOver) {
+                    _startGame();
+                    return;
+                  }
+                  if (d.localPosition.dx < _trackWidth / 2) {
+                    _moveLeft();
+                  } else {
+                    _moveRight();
+                  }
+                },
+                child: _buildTrack(),
+              ),
+            ),
+          ),
+          _buildControls(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHUD() {
     return Container(
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.6),
-            blurRadius: 12,
-            spreadRadius: 2,
+      color: const Color(0xFF1A1A2E),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Lives
+          Row(
+            children: List.generate(
+              3,
+              (i) => Icon(
+                Icons.favorite,
+                color: i < _lives ? Colors.redAccent : Colors.grey[800],
+                size: 22,
+              ),
+            ),
+          ),
+          // Score
+          Text(
+            'Skor: $_score',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          // Coins
+          Row(
+            children: [
+              const Icon(Icons.monetization_on, color: Colors.amber, size: 20),
+              const SizedBox(width: 4),
+              Text(
+                '$_coins',
+                style: const TextStyle(
+                  color: Colors.amber,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
           ),
         ],
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+    );
+  }
+
+  Widget _buildTrack() {
+    return Stack(
+      children: [
+        // Track background
+        Container(
+          width: _trackWidth,
+          height: _trackHeight,
+          decoration: BoxDecoration(
+            color: const Color(0xFF16213E),
+            border: Border.all(color: Colors.blueGrey.shade800, width: 1),
+          ),
+          child: CustomPaint(
+            painter: _LaneLinePainter(lanes: _kLanes, laneWidth: _kLaneWidth),
+          ),
+        ),
+
+        // Game objects
+        ..._objects.map((obj) => _buildObject(obj)),
+
+        // Player
+        _buildPlayer(),
+
+        // Power-up indicators
+        if (_shieldActive)
+          _buildPowerUpOverlay(Icons.shield, Colors.cyanAccent, _shieldTimer),
+        if (_magnetActive)
+          Positioned(
+            top: 8,
+            left: 4,
+            child: _powerUpBadge(
+              Icons.offline_bolt,
+              Colors.pinkAccent,
+              _magnetTimer,
+            ),
+          ),
+        if (_doubleScoreActive)
+          Positioned(
+            top: 8,
+            right: 4,
+            child: _powerUpBadge(
+              Icons.double_arrow,
+              Colors.greenAccent,
+              _doubleScoreTimer,
+            ),
+          ),
+
+        // Overlay messages
+        if (!_started) _buildCenterMessage('Tap untuk mula!', null),
+        if (_gameOver) _buildGameOverOverlay(),
+      ],
+    );
+  }
+
+  Widget _buildObject(_GameObject obj) {
+    final x = _laneToX(obj.lane);
+    Color color;
+    IconData icon;
+    switch (obj.type) {
+      case ObjType.obstacle:
+        color = Colors.redAccent;
+        icon = Icons.block;
+        break;
+      case ObjType.coin:
+        color = Colors.amber;
+        icon = Icons.monetization_on;
+        break;
+      case ObjType.shield:
+        color = Colors.cyanAccent;
+        icon = Icons.shield;
+        break;
+      case ObjType.magnet:
+        color = Colors.pinkAccent;
+        icon = Icons.offline_bolt;
+        break;
+      case ObjType.doubleScore:
+        color = Colors.greenAccent;
+        icon = Icons.double_arrow;
+        break;
+    }
+
+    return Positioned(
+      left: x + (_kPlayerSize - _kObjectSize) / 2,
+      top: obj.y - _kObjectSize / 2,
+      child: Icon(icon, color: color, size: _kObjectSize),
+    );
+  }
+
+  Widget _buildPlayer() {
+    final playerY = _trackHeight - 90.0;
+    final blink =
+        _invincibleTimer > 0 && ((_invincibleTimer * 6).toInt() % 2 == 0);
+    return Positioned(
+      left: _playerCurrentX,
+      top: playerY - _kPlayerSize / 2,
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          Icon(icon, color: Colors.white, size: 20),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 9,
+          if (_shieldActive)
+            Container(
+              width: _kPlayerSize + 14,
+              height: _kPlayerSize + 14,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.cyanAccent, width: 2.5),
+                color: Colors.cyanAccent.withValues(alpha: 0.18),
+              ),
+            ),
+          Icon(
+            Icons.account_balance_wallet_rounded,
+            color: blink ? Colors.transparent : Colors.amberAccent,
+            size: _kPlayerSize,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildControls() {
+    return Container(
+      color: const Color(0xFF1A1A2E),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Left button
+          _controlButton(Icons.arrow_back_ios_rounded, _moveLeft),
+          // Speed indicator
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.speed, color: Colors.white54, size: 18),
+              Text(
+                '${_speed.toInt()}',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+          // Right button
+          _controlButton(Icons.arrow_forward_ios_rounded, _moveRight),
+        ],
+      ),
+    );
+  }
+
+  Widget _controlButton(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 64,
+        height: 52,
+        decoration: BoxDecoration(
+          color: Colors.white10,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Icon(icon, color: Colors.white70, size: 26),
+      ),
+    );
+  }
+
+  Widget _buildCenterMessage(String msg, Color? color) {
+    return Positioned.fill(
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.black54,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            msg,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color ?? Colors.amberAccent,
+              fontSize: 22,
               fontWeight: FontWeight.bold,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGameOverOverlay() {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.72),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'GAME OVER',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Skor: $_score',
+              style: const TextStyle(color: Colors.white, fontSize: 20),
+            ),
+            Text(
+              'Coins: $_coins',
+              style: const TextStyle(color: Colors.amber, fontSize: 18),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amberAccent,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+              ),
+              onPressed: _startGame,
+              icon: const Icon(Icons.replay),
+              label: const Text(
+                'Main Lagi',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Keluar',
+                style: TextStyle(color: Colors.white54, fontSize: 14),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPowerUpOverlay(IconData icon, Color color, double timer) {
+    return Positioned(
+      bottom: 12,
+      left: 0,
+      right: 0,
+      child: Center(child: _powerUpBadge(icon, color, timer)),
+    );
+  }
+
+  Widget _powerUpBadge(IconData icon, Color color, double timer) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color, width: 1.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            '${timer.toStringAsFixed(1)}s',
+            style: TextStyle(color: color, fontSize: 12),
+          ),
         ],
       ),
     );
@@ -750,33 +690,39 @@ class _ObstacleWidget extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-// COIN WIDGET
+//  Lane line painter
 // ─────────────────────────────────────────────
-class _CoinWidget extends StatelessWidget {
-  const _CoinWidget();
+class _LaneLinePainter extends CustomPainter {
+  final int lanes;
+  final double laneWidth;
+
+  const _LaneLinePainter({required this.lanes, required this.laneWidth});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.amber,
-        boxShadow: [
-          BoxShadow(color: Colors.amber.withValues(alpha: 0.6), blurRadius: 8),
-        ],
-      ),
-      child: const Center(
-        child: Text(
-          '\$',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.blueGrey.withValues(alpha: 0.35)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    for (int i = 1; i < lanes; i++) {
+      final x = i * laneWidth;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+
+    // Moving road dashes
+    final dashPaint = Paint()
+      ..color = Colors.white10
+      ..strokeWidth = 2;
+
+    for (int lane = 0; lane < lanes; lane++) {
+      final cx = lane * laneWidth + laneWidth / 2;
+      for (double y = 0; y < size.height; y += 40) {
+        canvas.drawLine(Offset(cx, y), Offset(cx, y + 20), dashPaint);
+      }
+    }
   }
+
+  @override
+  bool shouldRepaint(_LaneLinePainter old) => false;
 }

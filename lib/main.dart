@@ -17,7 +17,7 @@ class AppTheme {
   // ── Core brand ───────────────────────────────────────────────────
   static const Color primary = Color(0xFF22C55E); // vibrant green
   static const Color primaryDark = Color(0xFF1A5928); // deep forest green
-  static const Color primaryDeep = Color(0xFF0A1A0E); // near-black dark green
+  static const Color primaryDeep = Color(0xFF0A1A0E); // near-bv lack dark green
   static const Color accent = Color(0xFF4ADE80); // bright light green
 
   // ── Semantic ─────────────────────────────────────────────────────

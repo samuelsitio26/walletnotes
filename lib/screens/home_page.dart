@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../main.dart';
-import 'arcade_game.dart';
 import '../models/transaction.dart';
 import '../models/task.dart';
 import '../services/database_helper.dart';
@@ -11,6 +10,7 @@ import 'add_transaction_page.dart';
 import 'add_task_page.dart';
 import 'statistics_page.dart';
 import 'import_csv_page.dart';
+import 'arcade_game.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -223,10 +223,10 @@ class _HomePageState extends State<HomePage>
               MaterialPageRoute(builder: (_) => const StatisticsPage()),
             ),
           ),
-          // Game launcher
+          // Game Wallet Runner
           IconButton(
             icon: const Icon(Icons.videogame_asset, color: Colors.white),
-            tooltip: 'Arcade',
+            tooltip: 'Wallet Runner Game',
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ArcadeGame()),
@@ -723,22 +723,37 @@ class _HomePageState extends State<HomePage>
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Icon(
-                            Icons.calendar_today,
-                            size: 12,
-                            color: Colors.grey.shade500,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.calendar_today,
+                                size: 12,
+                                color:
+                                    !task.isCompleted &&
+                                        task.dueDate.isBefore(DateTime.now())
+                                    ? Colors.red
+                                    : Colors.grey.shade500,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${task.dueDate.day}/${task.dueDate.month}/${task.dueDate.year}',
+                                style: TextStyle(
+                                  color:
+                                      !task.isCompleted &&
+                                          task.dueDate.isBefore(DateTime.now())
+                                      ? Colors.red
+                                      : Colors.grey.shade500,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${task.dueDate.day}/${task.dueDate.month}/${task.dueDate.year}',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -760,6 +775,38 @@ class _HomePageState extends State<HomePage>
                               ),
                             ),
                           ),
+                          if (!task.isCompleted &&
+                              task.dueDate.isBefore(DateTime.now()))
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                // ignore: deprecated_member_use
+                                color: Colors.red.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.warning_rounded,
+                                    size: 10,
+                                    color: Colors.red,
+                                  ),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'TERLAMBAT',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                     ],

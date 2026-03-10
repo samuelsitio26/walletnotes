@@ -19,7 +19,12 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return await openDatabase(
+      path,
+      version: 2,
+      onCreate: _createDB,
+      onUpgrade: _upgradeDB,
+    );
   }
 
   Future _createDB(Database db, int version) async {
@@ -50,6 +55,40 @@ class DatabaseHelper {
         priority $textType
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE game_stats (
+        id INTEGER PRIMARY KEY,
+        total_coins INTEGER NOT NULL DEFAULT 0,
+        high_score INTEGER NOT NULL DEFAULT 0,
+        games_played INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.insert('game_stats', {
+      'id': 1,
+      'total_coins': 0,
+      'high_score': 0,
+      'games_played': 0,
+    });
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS game_stats (
+          id INTEGER PRIMARY KEY,
+          total_coins INTEGER NOT NULL DEFAULT 0,
+          high_score INTEGER NOT NULL DEFAULT 0,
+          games_played INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+      await db.insert('game_stats', {
+        'id': 1,
+        'total_coins': 0,
+        'high_score': 0,
+        'games_played': 0,
+      });
+    }
   }
 
   // ===== TRANSACTION CRUD =====
@@ -227,6 +266,33 @@ class DatabaseHelper {
       "SELECT DISTINCT category FROM transactions WHERE type = 'expense' ORDER BY category ASC",
     );
     return result.map((row) => row['category'] as String).toList();
+  }
+
+  // ===== GAME STATS =====
+  Future<Map<String, int>> getGameStats() async {
+    final db = await database;
+    final result = await db.query('game_stats', where: 'id = 1');
+    if (result.isEmpty) {
+      return {'total_coins': 0, 'high_score': 0, 'games_played': 0};
+    }
+    return {
+      'total_coins': (result.first['total_coins'] as num).toInt(),
+      'high_score': (result.first['high_score'] as num).toInt(),
+      'games_played': (result.first['games_played'] as num).toInt(),
+    };
+  }
+
+  Future<void> addGameCoins(int coins, int score) async {
+    final db = await database;
+    await db.rawUpdate(
+      'UPDATE game_stats SET total_coins = total_coins + ?, high_score = MAX(high_score, ?), games_played = games_played + 1 WHERE id = 1',
+      [coins, score],
+    );
+  }
+
+  Future<int> getGameCoins() async {
+    final stats = await getGameStats();
+    return stats['total_coins'] ?? 0;
   }
 
   Future close() async {

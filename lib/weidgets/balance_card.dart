@@ -97,6 +97,7 @@ class BalanceCard extends StatelessWidget {
                           // ignore: deprecated_member_use
                           Icon(
                             Icons.account_balance_wallet_rounded,
+                            // ignore: deprecated_member_use
                             color: Colors.white.withOpacity(0.85),
                             size: 14,
                           ),
@@ -105,6 +106,7 @@ class BalanceCard extends StatelessWidget {
                           Text(
                             'WalletNotes',
                             style: TextStyle(
+                              // ignore: deprecated_member_use
                               color: Colors.white.withOpacity(0.85),
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
@@ -180,6 +182,7 @@ class BalanceCard extends StatelessWidget {
                     Container(
                       width: 1,
                       height: 44,
+                      // ignore: deprecated_member_use
                       color: Colors.white.withOpacity(0.12),
                       margin: const EdgeInsets.symmetric(horizontal: 8),
                     ),
